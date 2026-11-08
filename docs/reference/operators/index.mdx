@@ -164,7 +164,7 @@ See [IN operators](/reference/statements/in) and [EXISTS](/reference/operators/e
 `a != ANY (subquery)` – The same as `a NOT IN (SELECT singleValueOrNull(*) FROM subquery)`.
 
 ### in subquery function {#in-subquery-function-1}
-`a = ALL (subquery)` – The same as `a IN (SELECT singleValueOrNull(*) FROM subquery)`.
+`a = ALL (subquery)` – The same as `if((SELECT count() FROM subquery) = 0, 1, a IN (SELECT singleValueOrNull(*) FROM subquery))`.
 
 ### notIn subquery function {#notin-subquery-function-1}
 `a != ALL (subquery)` – The `notIn(a, subquery)` function.

@@ -163,12 +163,12 @@ enum class SubqueryFunctionType : uint8_t
     ALL
 };
 
-static bool modifyAST(ASTPtr ast, SubqueryFunctionType type)
+static bool modifyAST(ASTPtr & ast, SubqueryFunctionType type)
 {
     /* Rewrite in AST:
      *  = ANY --> IN
      * != ALL --> NOT IN
-     *  = ALL --> IN (SELECT singleValueOrNull(*) FROM subquery)
+     *  = ALL --> if((SELECT count() FROM subquery) = 0, true, x IN (SELECT singleValueOrNull(*) FROM subquery))
      * != ANY --> NOT IN (SELECT singleValueOrNull(*) FROM subquery)
     **/
 
@@ -229,11 +229,28 @@ static bool modifyAST(ASTPtr ast, SubqueryFunctionType type)
 
     auto select_with_union_query = make_intrusive<ASTSelectWithUnionQuery>();
     select_with_union_query->list_of_selects = make_intrusive<ASTExpressionList>();
-    select_with_union_query->list_of_selects->children.push_back(std::move(select_query));
+    select_with_union_query->list_of_selects->children.push_back(select_query);
     select_with_union_query->children.push_back(select_with_union_query->list_of_selects);
 
     auto new_subquery = make_intrusive<ASTSubquery>(std::move(select_with_union_query));
     ast->children[0]->children.back() = std::move(new_subquery);
+
+    if (function_equals && type == SubqueryFunctionType::ALL)
+    {
+        auto count_query = select_query->clone();
+        auto count_expression_list = make_intrusive<ASTExpressionList>();
+        count_expression_list->children.push_back(makeASTFunction("count"));
+        count_query->as<ASTSelectQuery &>().setExpression(ASTSelectQuery::Expression::SELECT, count_expression_list);
+
+        auto count_union = make_intrusive<ASTSelectWithUnionQuery>();
+        count_union->list_of_selects = make_intrusive<ASTExpressionList>();
+        count_union->list_of_selects->children.push_back(std::move(count_query));
+        count_union->children.push_back(count_union->list_of_selects);
+
+        auto is_empty = makeASTFunction(
+                "equals", make_intrusive<ASTSubquery>(std::move(count_union)), make_intrusive<ASTLiteral>(UInt64(0)));
+        ast = makeASTFunction("if", std::move(is_empty), make_intrusive<ASTLiteral>(UInt64(1)), ast);
+    }
 
     return true;
 }

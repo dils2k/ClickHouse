@@ -7,6 +7,7 @@ select 1 != all (select number from numbers(10));
 
 select 1 == all (select 1 from numbers(10));
 select 1 == all (select number from numbers(10));
+select 1 == all (select number from numbers(0));
 
 select 1 != any (select 1 from numbers(10));
 select 1 != any (select number from numbers(10));
